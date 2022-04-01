@@ -41,4 +41,7 @@ class Tool(object):
 
     def execute(self, parameters, messages):
         """The source code of the tool."""
+
+        arcpy.AddMessage('Hello there')
+
         return
