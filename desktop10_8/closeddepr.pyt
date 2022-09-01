@@ -21,7 +21,29 @@ class Tool(object):
 
     def getParameterInfo(self):
         """Define parameter definitions"""
-        params = None
+        in_dem = arcpy.Parameter(
+            displayName="Input raster DEM",
+            name="in_dem",
+            datatype="GPRasterLayer",
+            parameterType="Required",
+            direction="Input")
+
+        in_runoff = arcpy.Parameter(
+            displayName="Runoff amount in mm",
+            name="densify_dist",
+            datatype="GPDouble",
+            parameterType="Required",
+            direction="Input")
+        in_runoff.value = 10
+
+        out_features = arcpy.Parameter(
+            displayName="Output depressions",
+            name="out_features",
+            datatype="DEFeatureClass",
+            parameterType="Required",
+            direction="Output")
+
+        params = [in_dem, in_runoff, out_features]
         return params
 
     def isLicensed(self):
@@ -42,6 +64,8 @@ class Tool(object):
     def execute(self, parameters, messages):
         """The source code of the tool."""
 
-        arcpy.AddMessage('Hello there')
+        in_dem=parameters[0].valueAsText
+        in_runoff=parameters[1].valueAsText
+        out_features=parameters[2].valueAsText
 
         return
