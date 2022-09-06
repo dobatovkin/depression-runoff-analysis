@@ -6,4 +6,3 @@ Reqirements:
 
 - ArcGIS Desktop 10.8.2 or newer (Python 2.7.18 with ArcPy enviroment)
 - Arc Hydro Tools 10.8.0.38
-

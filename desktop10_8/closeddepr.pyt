@@ -83,21 +83,27 @@ class RunoffAnalysis(object):
         out_depr=parameters[2].valueAsText
         out_da=parameters[3].valueAsText
         
+        arcpy.AddMessage('Importing Arc Hydro Tools Python...')
+
         arcpy.ImportToolbox(archydrotoolbox_py)
 
+        arcpy.AddMessage('Delination of closed depressions and their drainage areas...')
+
         arcpy.DepressionEvaluation_archydropy(in_dem, out_depr, out_da)
+
+        arcpy.AddMessage('Adding runoff fields...')
 
         arcpy.AddField_management(out_depr, 'DrainVolume', 'DOUBLE')
         arcpy.AddField_management(out_depr, 'OverflowVolume', 'DOUBLE')
         arcpy.AddField_management(out_depr, 'IsFilled', 'SHORT')
 
-        arcpy.AddMessage('test1')
+        arcpy.AddMessage('Calculating DrainVolume field...')
 
         arcpy.CalculateField_management(out_depr,
-            'DrainVolume', '!DrainArea! * {0}/10000'.format(in_runoff), 
+            'DrainVolume', '!DrainArea! * {0}/1000'.format(in_runoff), 
             'PYTHON_9.3')
 
-        arcpy.AddMessage('test2')
+        arcpy.AddMessage('Calculating OverflowVolume field...')
 
         arcpy.CalculateField_management(out_depr,
             'OverflowVolume', 'overflow(!DrainVolume!,!FillVolume!)'.format(in_runoff), 
@@ -108,7 +114,7 @@ class RunoffAnalysis(object):
                 else:
                     return 0''')
 
-        arcpy.AddMessage('test3')
+        arcpy.AddMessage('Calculating IsFilled field...')
 
         arcpy.CalculateField_management(out_depr, 
             'IsFilled',
@@ -119,6 +125,5 @@ class RunoffAnalysis(object):
                     return 1
                 else:
                     return 0''')
-
 
         return
