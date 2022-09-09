@@ -1,5 +1,4 @@
 import arcpy
-import depressionevaluation
 archydrotoolbox_py='C:/Program Files (x86)/ArcGIS/Desktop10.8/ArcToolbox/Toolboxes/Arc Hydro Tools Python'
 class Toolbox(object):
     def __init__(self):
@@ -30,11 +29,19 @@ class RunoffAnalysis(object):
 
         in_runoff = arcpy.Parameter(
             displayName="Runoff amount in mm",
-            name="densify_dist",
+            name="in_runoff",
             datatype="GPDouble",
             parameterType="Required",
             direction="Input")
         in_runoff.value = 10
+
+        in_dl_area = arcpy.Parameter(
+            displayName="Area to define a stream in amount of DEM cells",
+            name="in_dl_area",
+            datatype="GPDouble",
+            parameterType="Required",
+            direction="Input")
+        in_dl_area.value = 1000
 
         out_depr = arcpy.Parameter(
             displayName="Output depressions",
@@ -44,20 +51,20 @@ class RunoffAnalysis(object):
             direction="Output")
 
         out_da = arcpy.Parameter(
-            displayName="Output drainage areas",
+            displayName="Output depression drainage areas",
             name="out_da",
             datatype="DEFeatureClass",
             parameterType="Required",
             direction="Output")
 
-        # out_dl = arcpy.Parameter(
-        #     displayName="Output drainage lines",
-        #     name="out_features",
-        #     datatype="DEFeatureClass",
-        #     parameterType="Required",
-        #     direction="Output")
+        out_dl = arcpy.Parameter(
+            displayName="Output drainage lines (streams)",
+            name="out_dl",
+            datatype="DEFeatureClass",
+            parameterType="Required",
+            direction="Output")
 
-        params = [in_dem, in_runoff, out_depr, out_da]
+        params = [in_dem, in_runoff, in_dl_area, out_depr, out_da, out_dl]
         return params
 
     def isLicensed(self):
@@ -79,9 +86,11 @@ class RunoffAnalysis(object):
         """The source code of the tool."""
 
         in_dem=parameters[0].valueAsText
-        in_runoff=parameters[1].valueAsText
-        out_depr=parameters[2].valueAsText
-        out_da=parameters[3].valueAsText
+        in_runoff=float(parameters[1].valueAsText)
+        in_dl_area=parameters[2].valueAsText
+        out_depr=parameters[3].valueAsText
+        out_da=parameters[4].valueAsText
+        out_dl=parameters[5].valueAsText
         
         arcpy.AddMessage('Importing Arc Hydro Tools Python...')
 
@@ -125,5 +134,31 @@ class RunoffAnalysis(object):
                     return 1
                 else:
                     return 0''')
+
+        # arcpy.AddMessage('Adding connection fields...')
+
+        # arcpy.AddField_management(out_depr, 'NextDownID', 'LONG')
+        # arcpy.AddField_management(out_depr, 'UpstreamVolume', 'DOUBLE')
+        
+        # arcpy.AddMessage('Calculating UpstreamVolume field...')
+
+        arcpy.AddMessage('Calculating flow direction raster...')
+
+        flowdir = 'in_memory/flowdir'
+        arcpy.FlowDirection_archydropy(in_dem, flowdir)
+
+        arcpy.AddMessage('Calculating flow accumulation raster...')
+
+        flowacc = 'in_memory/flowacc'
+        arcpy.FlowAccumulation_archydropy(in_dem, flowacc)
+
+        arcpy.AddMessage('Calculating drainage lines...')
+
+        dl_raster='in_memory/dl_raster'
+        dllnk_raster='in_memory/dllnk_raster'
+        arcpy.StreamDefinition_archydropy(flowacc, in_dl_area, dl_raster)
+        arcpy.StreamSegmentation_archydropy(dl_raster, flowdir, dllnk_raster)
+        arcpy.DrainageLineProcessing_archydropy(dllnk_raster, flowdir, out_dl) 
+
 
         return
