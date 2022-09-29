@@ -83,7 +83,8 @@ class RunoffAnalysis(object):
         return
 
     def execute(self, parameters, messages):
-        """The source code of the tool."""
+        
+        # !Base block
 
         in_dem=parameters[0].valueAsText
         in_runoff=float(parameters[1].valueAsText)
@@ -135,13 +136,6 @@ class RunoffAnalysis(object):
                 else:
                     return 0''')
 
-        # arcpy.AddMessage('Adding connection fields...')
-
-        # arcpy.AddField_management(out_depr, 'NextDownID', 'LONG')
-        # arcpy.AddField_management(out_depr, 'UpstreamVolume', 'DOUBLE')
-        
-        # arcpy.AddMessage('Calculating UpstreamVolume field...')
-
         arcpy.AddMessage('Calculating flow direction raster...')
 
         flowdir = 'in_memory/flowdir'
@@ -160,5 +154,30 @@ class RunoffAnalysis(object):
         arcpy.StreamSegmentation_archydropy(dl_raster, flowdir, dllnk_raster)
         arcpy.DrainageLineProcessing_archydropy(dllnk_raster, flowdir, out_dl) 
 
+        # !Connectivity block
+
+        arcpy.AddMessage('Calculating filled DEM')
+        
+        fill_dem='in_memory/fill_DEM'
+        arcpy.FillSinks_archydropy (in_dem, fill_dem)  
+
+        arcpy.AddMessage('Calculating flow direction raster for filled DEM...')
+
+        fill_flowdir = 'in_memory/fill_flowdir'
+        arcpy.FlowDirection_archydropy(fill_dem, fill_flowdir)
+
+        arcpy.AddMessage('Calculating flow accumulation raster for filled DEM...')
+
+        fill_flowacc = 'in_memory/fill_flowacc'
+        arcpy.FlowAccumulation_archydropy(fill_dem, fill_flowacc)    
+
+        # arcpy.AddMessage('Adding connection fields...')
+
+        # arcpy.AddField_management(out_depr, 'NextDownID', 'LONG')
+        # arcpy.AddField_management(out_depr, 'UpstreamVolume', 'DOUBLE')
+        
+        # arcpy.AddMessage('Calculating UpstreamVolume field...')
+
+        arcpy.AddMessage('SUCCESS')
 
         return
