@@ -13,13 +13,11 @@ class Toolbox(object):
 
 class RunoffAnalysis(object):
     def __init__(self):
-        """Define the tool (tool name is the name of the class)."""
         self.label = "Runoff Analysis"
         self.description = ""
         self.canRunInBackground = False
 
     def getParameterInfo(self):
-        """Define parameter definitions"""
         in_dem = arcpy.Parameter(
             displayName="Input raster DEM",
             name="in_dem",
@@ -86,6 +84,7 @@ class RunoffAnalysis(object):
         
         # !Base block
 
+        # Parameters definition
         in_dem=parameters[0].valueAsText
         in_runoff=float(parameters[1].valueAsText)
         in_dl_area=parameters[2].valueAsText
