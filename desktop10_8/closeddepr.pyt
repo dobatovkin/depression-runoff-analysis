@@ -47,7 +47,21 @@ class RunoffAnalysis(object):
             parameterType="Required",
             direction="Output")
 
-        params = [in_dem, in_runoff, out_depr, out_da]
+        out_dr_dl = arcpy.Parameter(
+            displayName="Output depression drainage lines",
+            name="out_dr_dl",
+            datatype="DEFeatureClass",
+            parameterType="Required",
+            direction="Output")
+
+        out_hyd_jun = arcpy.Parameter(
+            displayName="Output hydro junction points",
+            name="out_hyd_jun",
+            datatype="DEFeatureClass",
+            parameterType="Required",
+            direction="Output")
+
+        params = [in_dem, in_runoff, out_depr, out_da, out_dr_dl, out_hyd_jun]
         return params
 
     def isLicensed(self):
@@ -74,7 +88,9 @@ class RunoffAnalysis(object):
         in_runoff=float(parameters[1].valueAsText)
         out_depr=parameters[2].valueAsText
         out_da=parameters[3].valueAsText
-        
+        out_dr_dl=parameters[4].valueAsText
+        out_hyd_jun=parameters[5].valueAsText
+
         arcpy.AddMessage('Importing Arc Hydro Tools Python...')
 
         arcpy.ImportToolbox(archydrotoolbox_py)
@@ -118,39 +134,60 @@ class RunoffAnalysis(object):
                 else:
                     return 0''')
 
+        # !Connectivity block
+
+
+        arcpy.AddMessage('Calculating Sink Structures...')
+        sink_poly='in_memory/sink_poly'
+        sink_poly_grid='in_memory/sink_poly_grid'
+        sink_pnt='in_memory/sink_pnt'
+        sink_pnt_grid='in_memory/sink_pnt_grid'
+        arcpy.CreateSinkStructures_archydropy(in_dem, out_depr, sink_poly, sink_poly_grid, sink_pnt, sink_pnt_grid) 
+
         arcpy.AddMessage('Calculating flow direction raster...')
 
         flowdir = 'in_memory/flowdir'
         arcpy.FlowDirection_archydropy(in_dem, flowdir)
 
+        flowdir_adj='in_memory/flowdir_adj'
+        arcpy.AdjustFlowDirectioninSinks_archydropy(flowdir, sink_pnt_grid, sink_poly_grid, flowdir_adj) 
+
         arcpy.AddMessage('Calculating flow accumulation raster...')
 
         flowacc = 'in_memory/flowacc'
-        arcpy.FlowAccumulation_archydropy(in_dem, flowacc)
+        arcpy.FlowAccumulation_archydropy(flowdir_adj, flowacc)
 
-        # !Connectivity block
+        sink_DA_grid='in_memory/sink_DA_grid'
+        sink_DA='in_memory/sink_DA'
+        arcpy.CatchmentGridDelineation_archydropy(flowdir_adj, sink_pnt_grid, sink_DA_grid)
+        arcpy.CatchmentPolyProcessing_archydropy(sink_DA_grid, sink_DA)
 
-        arcpy.AddMessage('Calculating filled DEM')
+        dr_pnt='in_memory/dr_pnt'
+        arcpy.DrainagePointProcessing_archydropy(flowacc, sink_DA_grid, sink_DA, dr_pnt) 
+
+        dr_boundary='in_memory/dr_boundary'
+        dr_conn='in_memory/dr_conn'
+        arcpy.DrainageBoundaryDefinition_archydropy(sink_DA, in_dem, dr_boundary, dr_conn)
+
+        hyd_edge='in_memory'
+        arcpy.DrainageConnectivityCharacterization_archydropy(in_dem, flowdir_adj, sink_DA, dr_boundary, dr_pnt, dr_conn, hyd_edge, out_hyd_jun, out_dr_dl)
+
+        arcpy.SelectLayerByAttribute_management(out_hyd_jun, 'NEW_SELECTION', 'NextDownID = -1')
+        arcpy.management.DeleteFeatures(out_hyd_jun)
+
+        arcpy.AddMessage('Adding connection fields...')
+
+        arcpy.AddField_management(out_depr, 'HydJunID', 'LONG')
+        arcpy.AddField_management(out_depr, 'NextDownID', 'LONG')
+        arcpy.AddField_management(out_depr, 'UpstreamVolume', 'DOUBLE')
         
-        fill_dem='in_memory/fill_DEM'
-        arcpy.FillSinks_archydropy (in_dem, fill_dem)  
+        for row in arcpy.da.UpdateCursor(out_depr, ['OID@', 'HydJunID', 'HydJunID']):
+            arcpy.SelectLayerByAttribute_management(out_da, 'NEW_SELECTION', 'OID@ = {0}'.format(row[0]))
+            arcpy.SelectLayerByLocation_management(out_hyd_jun, 'INTERSECT', out_da)
+            arcpy.SelectLayerByAttribute_management(out_hyd_jun, SUBSET_SELECTION,)
 
-        arcpy.AddMessage('Calculating flow direction raster for filled DEM...')
 
-        fill_flowdir = 'in_memory/fill_flowdir'
-        arcpy.FlowDirection_archydropy(fill_dem, fill_flowdir)
-
-        arcpy.AddMessage('Calculating flow accumulation raster for filled DEM...')
-
-        fill_flowacc = 'in_memory/fill_flowacc'
-        arcpy.FlowAccumulation_archydropy(fill_dem, fill_flowacc)    
-
-        # arcpy.AddMessage('Adding connection fields...')
-
-        # arcpy.AddField_management(out_depr, 'NextDownID', 'LONG')
-        # arcpy.AddField_management(out_depr, 'UpstreamVolume', 'DOUBLE')
-        
-        # arcpy.AddMessage('Calculating UpstreamVolume field...')
+        arcpy.AddMessage('Calculating UpstreamVolume field...')
 
         arcpy.AddMessage('SUCCESS')
 
