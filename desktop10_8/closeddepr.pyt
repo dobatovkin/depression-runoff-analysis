@@ -134,7 +134,7 @@ class RunoffAnalysis(object):
                 else:
                     return 0''')
 
-        # !Connectivity block
+        # !Connectivity prep block
 
 
         arcpy.AddMessage('Calculating Sink Structures...')
@@ -180,12 +180,43 @@ class RunoffAnalysis(object):
         arcpy.AddField_management(out_depr, 'HydJunID', 'LONG')
         arcpy.AddField_management(out_depr, 'NextDownID', 'LONG')
         arcpy.AddField_management(out_depr, 'UpstreamVolume', 'DOUBLE')
+        arcpy.AddField_management(out_hyd_jun, 'IsActive', 'SHORT')
         
-        for row in arcpy.da.UpdateCursor(out_depr, ['OID@', 'HydJunID', 'HydJunID']):
-            arcpy.SelectLayerByAttribute_management(out_da, 'NEW_SELECTION', 'OID@ = {0}'.format(row[0]))
-            arcpy.SelectLayerByLocation_management(out_hyd_jun, 'INTERSECT', out_da)
-            arcpy.SelectLayerByAttribute_management(out_hyd_jun, SUBSET_SELECTION,)
+        # !Connectivity loop block
+        with arcpy.da.UpdateCursor(out_depr, ['OID@', 'HydJunID', 'NextDownID']) as cursor:
+            for row in cursor:
+                arcpy.SelectLayerByAttribute_management(out_da, 'NEW_SELECTION', 'OID@ = {0}'.format(row[0]))
+                arcpy.SelectLayerByLocation_management(out_hyd_jun, 'INTERSECT', out_da)
+                arcpy.CalculateField_management(out_hyd_jun, 'IsActive', '1', 'PYTHON_9.3')
 
+                elev_row=[]
+                for lower_row in arcpy.da.SearchCursor(out_hyd_jun, ['Elev'], where_clause='IsActive = 1'):
+                    elev_row.append(float(lower_row[0]))
+
+                arcpy.AddMessage('Processing depr', str(row[0]))
+                arcpy.AddMessage(str(elev_row))
+
+                min_elev=min(elev_row)
+                arcpy.SelectLayerByAttribute_management(out_hyd_jun, 'SUBSET_SELECTION', 
+                    where_clause='Elev = {0}'.format(min_elev))
+
+                arcpy.CalculateField_management(out_hyd_jun, 'IsActive', '2', 'PYTHON_9.3')
+
+                with arcpy.da.UpdateCursor(out_hyd_jun, ['HydroID', 'IsActive'], where_clause='IsActive = 2') as upper_cursor:
+                    for upper_row in upper_cursor:
+                        row[1]=upper_row[0]
+                        upper_row[1] = 3
+                        upper_cursor.updateRow(upper_row)
+
+                arcpy.SelectLayerByAttribute_management(out_hyd_jun, 'NEW_SELECTION', 'IsActive = 1')
+                arcpy.CalculateField_management(out_hyd_jun, 'IsActive', '0', 'PYTHON_9.3')
+                
+                arcpy.SelectLayerByAttribute_management(out_hyd_jun, 'CLEAR_SELECTION')
+                arcpy.SelectLayerByAttribute_management(out_da, 'CLEAR_SELECTION')
+
+                cursor.updateRow(row)
+
+    
 
         arcpy.AddMessage('Calculating UpstreamVolume field...')
 
