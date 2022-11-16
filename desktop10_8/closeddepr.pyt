@@ -138,10 +138,10 @@ class RunoffAnalysis(object):
 
 
         arcpy.AddMessage('Calculating Sink Structures...')
-        sink_poly='in_memory/sink_poly'
-        sink_poly_grid='in_memory/sink_poly_grid'
-        sink_pnt='in_memory/sink_pnt'
-        sink_pnt_grid='in_memory/sink_pnt_grid'
+        sink_poly=str(arcpy.env.scratchGDB)+'\\sink_poly'
+        sink_poly_grid=str(arcpy.env.scratchFolder)+'\\sink_poly_grid'
+        sink_pnt=str(arcpy.env.scratchGDB)+'\\sink_pnt'
+        sink_pnt_grid=str(arcpy.env.scratchFolder)+'\\sink_pnt_grid'
         arcpy.CreateSinkStructures_archydropy(in_dem, out_depr, sink_poly, sink_poly_grid, sink_pnt, sink_pnt_grid) 
 
         arcpy.AddMessage('Calculating flow direction raster...')
@@ -210,7 +210,7 @@ class RunoffAnalysis(object):
 
                 arcpy.SelectLayerByAttribute_management(out_hyd_jun, 'NEW_SELECTION', 'IsActive = 1')
                 arcpy.CalculateField_management(out_hyd_jun, 'IsActive', '0', 'PYTHON_9.3')
-                
+
                 arcpy.SelectLayerByAttribute_management(out_hyd_jun, 'CLEAR_SELECTION')
                 arcpy.SelectLayerByAttribute_management(out_da, 'CLEAR_SELECTION')
 
@@ -220,6 +220,12 @@ class RunoffAnalysis(object):
 
         arcpy.AddMessage('Calculating UpstreamVolume field...')
 
+        # ! Cleaning up block
+
+        arcpy.Delete_management(arcpy.env.scratchGDB)
+        arcpy.Delete_management(arcpy.env.scratchFolder)
+        arcpy.Delete_management(arcpy.env.scratchWorkspace)
+        
         arcpy.AddMessage('SUCCESS')
 
         return
