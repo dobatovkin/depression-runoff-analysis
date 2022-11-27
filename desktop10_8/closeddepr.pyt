@@ -138,38 +138,39 @@ class RunoffAnalysis(object):
 
 
         arcpy.AddMessage('Calculating Sink Structures...')
-        sink_poly=str(arcpy.env.scratchGDB)+'\\sink_poly'
-        sink_poly_grid=str(arcpy.env.scratchFolder)+'\\sink_poly_grid'
-        sink_pnt=str(arcpy.env.scratchGDB)+'\\sink_pnt'
-        sink_pnt_grid=str(arcpy.env.scratchFolder)+'\\sink_pnt_grid'
+        sink_poly = '{0}\\sink_poly'.format(arcpy.env.scratchGDB)
+        sink_poly_grid = '{0}\\sink_poly_grid'.format(arcpy.env.scratchWorkspace)
+        sink_pnt = '{0}\\sink_pnt'.format(arcpy.env.scratchGDB)
+        sink_pnt_grid = '{0}\\sink_pnt_grid'.format(arcpy.env.scratchWorkspace)
+        
         arcpy.CreateSinkStructures_archydropy(in_dem, out_depr, sink_poly, sink_poly_grid, sink_pnt, sink_pnt_grid) 
 
         arcpy.AddMessage('Calculating flow direction raster...')
 
-        flowdir = 'in_memory/flowdir'
+        flowdir = '{0}\\flowdir'.format(arcpy.env.scratchWorkspace)
         arcpy.FlowDirection_archydropy(in_dem, flowdir)
 
-        flowdir_adj='in_memory/flowdir_adj'
+        flowdir_adj='{0}\\flowdir_adj'.format(arcpy.env.scratchWorkspace)
         arcpy.AdjustFlowDirectioninSinks_archydropy(flowdir, sink_pnt_grid, sink_poly_grid, flowdir_adj) 
 
         arcpy.AddMessage('Calculating flow accumulation raster...')
 
-        flowacc = 'in_memory/flowacc'
+        flowacc = '{0}\\flowacc'.format(arcpy.env.scratchWorkspace)
         arcpy.FlowAccumulation_archydropy(flowdir_adj, flowacc)
 
-        sink_DA_grid='in_memory/sink_DA_grid'
-        sink_DA='in_memory/sink_DA'
+        sink_DA_grid='{0}\\sink_DA_grid'.format(arcpy.env.scratchWorkspace)
+        sink_DA='{0}\\sink_DA'.format(arcpy.env.scratchGDB)
         arcpy.CatchmentGridDelineation_archydropy(flowdir_adj, sink_pnt_grid, sink_DA_grid)
-        arcpy.CatchmentPolyProcessing_archydropy(sink_DA_grid, sink_DA)
+        arcpy.CatchmentPolygonProcessing_archydropy(sink_DA_grid, sink_DA)
 
-        dr_pnt='in_memory/dr_pnt'
+        dr_pnt='{0}\\dr_pnt'.format(arcpy.env.scratchGDB)
         arcpy.DrainagePointProcessing_archydropy(flowacc, sink_DA_grid, sink_DA, dr_pnt) 
 
-        dr_boundary='in_memory/dr_boundary'
-        dr_conn='in_memory/dr_conn'
+        dr_boundary='{0}\\dr_boundary'.format(arcpy.env.scratchGDB)
+        dr_conn='{0}\\dr_conn'.format(arcpy.env.scratchGDB)
         arcpy.DrainageBoundaryDefinition_archydropy(sink_DA, in_dem, dr_boundary, dr_conn)
 
-        hyd_edge='in_memory'
+        hyd_edge='{0}\\hyd_edge'.format(arcpy.env.scratchGDB)
         arcpy.DrainageConnectivityCharacterization_archydropy(in_dem, flowdir_adj, sink_DA, dr_boundary, dr_pnt, dr_conn, hyd_edge, out_hyd_jun, out_dr_dl)
 
         arcpy.SelectLayerByAttribute_management(out_hyd_jun, 'NEW_SELECTION', 'NextDownID = -1')
@@ -227,5 +228,7 @@ class RunoffAnalysis(object):
         arcpy.Delete_management(arcpy.env.scratchWorkspace)
         
         arcpy.AddMessage('SUCCESS')
+
+
 
         return
