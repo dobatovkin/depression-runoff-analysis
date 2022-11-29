@@ -8,12 +8,12 @@ class Toolbox(object):
         self.alias = ""
 
         # List of tool classes associated with this toolbox
-        self.tools = [RunoffAnalysis]
+        self.tools = [RunoffAnalysis, ConnectivityAnalysis]
 
 
 class RunoffAnalysis(object):
     def __init__(self):
-        self.label = "Runoff Analysis"
+        self.label = "1) Runoff Analysis"
         self.description = ""
         self.canRunInBackground = False
 
@@ -61,7 +61,14 @@ class RunoffAnalysis(object):
             parameterType="Required",
             direction="Output")
 
-        params = [in_dem, in_runoff, out_depr, out_da, out_dr_dl, out_hyd_jun]
+        out_hyd_edge = arcpy.Parameter(
+            displayName="Output hydro edge lines",
+            name="out_hyd_edge",
+            datatype="DEFeatureClass",
+            parameterType="Required",
+            direction="Output")
+
+        params = [in_dem, in_runoff, out_depr, out_da, out_dr_dl, out_hyd_jun, out_hyd_edge]
         return params
 
     def isLicensed(self):
@@ -90,6 +97,7 @@ class RunoffAnalysis(object):
         out_da=parameters[3].valueAsText
         out_dr_dl=parameters[4].valueAsText
         out_hyd_jun=parameters[5].valueAsText
+        out_hyd_edge=parameters[6].valueAsText
 
         arcpy.AddMessage('Importing Arc Hydro Tools Python...')
 
@@ -170,8 +178,69 @@ class RunoffAnalysis(object):
         dr_conn='{0}\\dr_conn'.format(arcpy.env.scratchGDB)
         arcpy.DrainageBoundaryDefinition_archydropy(sink_DA, in_dem, dr_boundary, dr_conn)
 
-        hyd_edge='{0}\\hyd_edge'.format(arcpy.env.scratchGDB)
-        arcpy.DrainageConnectivityCharacterization_archydropy(in_dem, flowdir_adj, sink_DA, dr_boundary, dr_pnt, dr_conn, hyd_edge, out_hyd_jun, out_dr_dl)
+        # hyd_edge='{0}\\hyd_edge'.format(arcpy.env.scratchGDB)
+        arcpy.DrainageConnectivityCharacterization_archydropy(in_dem, flowdir_adj, sink_DA, dr_boundary, dr_pnt, dr_conn, out_hyd_edge, out_hyd_jun, out_dr_dl)
+
+        return
+
+class ConnectivityAnalysis(object):
+    def __init__(self):
+        self.label = "2) Connectivity Analysis"
+        self.description = ""
+        self.canRunInBackground = False
+
+    def getParameterInfo(self):
+
+        in_runoff = arcpy.Parameter(
+            displayName="Runoff amount in mm",
+            name="in_runoff",
+            datatype="GPDouble",
+            parameterType="Required",
+            direction="Input")
+        in_runoff.value = 10
+
+        in_depr = arcpy.Parameter(
+            displayName="Input depressions",
+            name="in_depr",
+            datatype="DEFeatureClass",
+            parameterType="Required",
+            direction="Input")
+
+        in_da = arcpy.Parameter(
+            displayName="Input depressions' drainage areas",
+            name="in_da",
+            datatype="DEFeatureClass",
+            parameterType="Required",
+            direction="Input")
+
+        in_hyd_jun = arcpy.Parameter(
+            displayName="Input hydro junction points",
+            name="in_hyd_jun",
+            datatype="DEFeatureClass",
+            parameterType="Required",
+            direction="Input")
+
+        params = [in_runoff, in_depr, in_da, in_hyd_jun]
+        return params
+
+    def isLicensed(self):
+        """Set whether tool is licensed to execute."""
+        return True
+
+    def updateParameters(self, parameters):
+        """Modify the values and properties of parameters before internal
+        validation is performed.  This method is called whenever a parameter
+        has been changed."""
+        return
+
+    def updateMessages(self, parameters):
+        """Modify the messages created by internal validation for each tool
+        parameter.  This method is called after internal validation."""
+        return
+
+    def execute(self, parameters, messages):
+        
+        # !Base block
 
         arcpy.SelectLayerByAttribute_management(out_hyd_jun, 'NEW_SELECTION', 'NextDownID = -1')
         arcpy.management.DeleteFeatures(out_hyd_jun)
@@ -223,12 +292,10 @@ class RunoffAnalysis(object):
 
         # ! Cleaning up block
 
-        arcpy.Delete_management(arcpy.env.scratchGDB)
-        arcpy.Delete_management(arcpy.env.scratchFolder)
-        arcpy.Delete_management(arcpy.env.scratchWorkspace)
+        # arcpy.Delete_management(arcpy.env.scratchGDB)
+        # arcpy.Delete_management(arcpy.env.scratchFolder)
+        # arcpy.Delete_management(arcpy.env.scratchWorkspace)
         
         arcpy.AddMessage('SUCCESS')
-
-
 
         return
