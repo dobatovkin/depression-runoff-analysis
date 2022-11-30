@@ -179,6 +179,7 @@ class RunoffAnalysis(object):
         arcpy.DrainageBoundaryDefinition_archydropy(sink_DA, in_dem, dr_boundary, dr_conn)
 
         # hyd_edge='{0}\\hyd_edge'.format(arcpy.env.scratchGDB)
+        # ? Next tool seems broken for .pyt use -- it cannot output to scratch workspace 
         arcpy.DrainageConnectivityCharacterization_archydropy(in_dem, flowdir_adj, sink_DA, dr_boundary, dr_pnt, dr_conn, out_hyd_edge, out_hyd_jun, out_dr_dl)
 
         return
@@ -202,21 +203,21 @@ class ConnectivityAnalysis(object):
         in_depr = arcpy.Parameter(
             displayName="Input depressions",
             name="in_depr",
-            datatype="DEFeatureClass",
+            datatype="GPFeatureLayer",
             parameterType="Required",
             direction="Input")
 
         in_da = arcpy.Parameter(
             displayName="Input depressions' drainage areas",
             name="in_da",
-            datatype="DEFeatureClass",
+            datatype="GPFeatureLayer",
             parameterType="Required",
             direction="Input")
 
         in_hyd_jun = arcpy.Parameter(
             displayName="Input hydro junction points",
             name="in_hyd_jun",
-            datatype="DEFeatureClass",
+            datatype="GPFeatureLayer",
             parameterType="Required",
             direction="Input")
 
@@ -241,54 +242,88 @@ class ConnectivityAnalysis(object):
     def execute(self, parameters, messages):
         
         # !Base block
+        
+        # in_runoff, in_depr, in_da, in_hyd_jun
 
-        arcpy.SelectLayerByAttribute_management(out_hyd_jun, 'NEW_SELECTION', 'NextDownID = -1')
-        arcpy.management.DeleteFeatures(out_hyd_jun)
+        in_runoff = int(parameters[0].valueAsText)
+        in_depr = parameters[1].valueAsText
+        in_da = parameters[2].valueAsText
+        in_hyd_jun = parameters[3].valueAsText
+
+        depr='depr'
+        dra='dra'
+        hyd_jun='hyd_jun'
+        arcpy.MakeFeatureLayer_management(in_depr, depr)
+        arcpy.MakeFeatureLayer_management(in_da, dra)
+        arcpy.MakeFeatureLayer_management(in_hyd_jun, hyd_jun)
+        arcpy.AddMessage('Removing unnecessary hydro junction points...')
+
+        arcpy.SelectLayerByAttribute_management(hyd_jun, 'NEW_SELECTION', 'NextDownID = -1')
+        arcpy.management.DeleteFeatures(hyd_jun)
 
         arcpy.AddMessage('Adding connection fields...')
 
-        arcpy.AddField_management(out_depr, 'HydJunID', 'LONG')
-        arcpy.AddField_management(out_depr, 'NextDownID', 'LONG')
-        arcpy.AddField_management(out_depr, 'UpstreamVolume', 'DOUBLE')
-        arcpy.AddField_management(out_hyd_jun, 'IsActive', 'SHORT')
-        
-        # !Connectivity loop block
-        with arcpy.da.UpdateCursor(out_depr, ['OID@', 'HydJunID', 'NextDownID']) as cursor:
+        arcpy.AddField_management(depr, 'HydJunID', 'LONG')
+        arcpy.AddField_management(depr, 'NextDrownID', 'LONG')
+        arcpy.AddField_management(depr, 'NextDownID', 'LONG')
+        arcpy.AddField_management(depr, 'Order', 'LONG')
+        arcpy.AddField_management(depr, 'UpstreamVolume', 'DOUBLE')
+        arcpy.AddField_management(hyd_jun, 'IsActive', 'SHORT')
+        arcpy.AddField_management(hyd_jun, 'Elevin', 'LONG')
+        arcpy.CalculateField_management(hyd_jun, 'Elevin', '!Elev!*100000', 'PYTHON_9.3')
+
+        # ! Connectivity loop block
+
+        # todo: It can be a good idea to add progressor, considering amount of loops
+
+        with arcpy.da.UpdateCursor(depr, ['DrainID', 'HydJunID', 'NextDrownID']) as cursor:
             for row in cursor:
-                arcpy.SelectLayerByAttribute_management(out_da, 'NEW_SELECTION', 'OID@ = {0}'.format(row[0]))
-                arcpy.SelectLayerByLocation_management(out_hyd_jun, 'INTERSECT', out_da)
-                arcpy.CalculateField_management(out_hyd_jun, 'IsActive', '1', 'PYTHON_9.3')
+                arcpy.SelectLayerByAttribute_management(dra, 'NEW_SELECTION', 'HydroID = {0}'.format(row[0]))
+                arcpy.SelectLayerByLocation_management(hyd_jun, 'INTERSECT', dra)
+                arcpy.CalculateField_management(hyd_jun, 'IsActive', '1', 'PYTHON_9.3')
 
-                elev_row=[]
-                for lower_row in arcpy.da.SearchCursor(out_hyd_jun, ['Elev'], where_clause='IsActive = 1'):
-                    elev_row.append(float(lower_row[0]))
+                # todo: Speed up making an FL - exctract fewer fields 
 
-                arcpy.AddMessage('Processing depr', str(row[0]))
-                arcpy.AddMessage(str(elev_row))
+                curr_hyd_jun = "curr_hyd_jun"
+                arcpy.MakeFeatureLayer_management(hyd_jun, curr_hyd_jun, where_clause='IsActive = 1')
+                
+                elevList = [r[0] for r in arcpy.da.SearchCursor (curr_hyd_jun, ['Elevin'])]    # <-- proud of this 
+                arcpy.AddMessage(elevList)
+                arcpy.SelectLayerByAttribute_management(curr_hyd_jun, 'NEW_SELECTION', 'Elevin = {0}'.format(min(elevList)))
+                
+                count = int(str(arcpy.management.GetCount(curr_hyd_jun)))
+                if count == 1:
+                    for upper_row in arcpy.da.SearchCursor(curr_hyd_jun, ['HydroID']):
+                        row[1] = upper_row[0]
+                else: arcpy.AddMessage("Error "+str(count))
 
-                min_elev=min(elev_row)
-                arcpy.SelectLayerByAttribute_management(out_hyd_jun, 'SUBSET_SELECTION', 
-                    where_clause='Elev = {0}'.format(min_elev))
+                arcpy.SelectLayerByLocation_management(dra, 'INTERSECT', curr_hyd_jun, selection_type='NEW_SELECTION')
+                arcpy.SelectLayerByAttribute_management(dra, 'REMOVE_FROM_SELECTION', 'HydroID = {0}'.format(row[0]))
 
-                arcpy.CalculateField_management(out_hyd_jun, 'IsActive', '2', 'PYTHON_9.3')
+                if int(str(arcpy.management.GetCount(dra))) == 1:
+                    for upper_row in arcpy.da.SearchCursor(dra, ['HydroID']):
+                        row[2] = upper_row[0]
+                else:
+                    row[2] = -1
 
-                with arcpy.da.UpdateCursor(out_hyd_jun, ['HydroID', 'IsActive'], where_clause='IsActive = 2') as upper_cursor:
-                    for upper_row in upper_cursor:
-                        row[1]=upper_row[0]
-                        upper_row[1] = 3
-                        upper_cursor.updateRow(upper_row)
+                arcpy.Delete_management(curr_hyd_jun)
 
-                arcpy.SelectLayerByAttribute_management(out_hyd_jun, 'NEW_SELECTION', 'IsActive = 1')
-                arcpy.CalculateField_management(out_hyd_jun, 'IsActive', '0', 'PYTHON_9.3')
+                arcpy.SelectLayerByAttribute_management(hyd_jun, 'NEW_SELECTION', 'IsActive = 1')
+                arcpy.CalculateField_management(hyd_jun, 'IsActive', '0', 'PYTHON_9.3')
 
-                arcpy.SelectLayerByAttribute_management(out_hyd_jun, 'CLEAR_SELECTION')
-                arcpy.SelectLayerByAttribute_management(out_da, 'CLEAR_SELECTION')
+                arcpy.SelectLayerByAttribute_management(hyd_jun, 'CLEAR_SELECTION')
+                arcpy.SelectLayerByAttribute_management(dra, 'CLEAR_SELECTION')                
 
                 cursor.updateRow(row)
 
-    
 
-        arcpy.AddMessage('Calculating UpstreamVolume field...')
+        arcpy.DeleteField_management(hyd_jun, 'Elevin', 'IsAcive')
+
+        # ! Order definition block
+        arcpy.AddField_management(dra, 'DeprID', 'LONG')
+        
+        
+        # arcpy.AddMessage('Calculating UpstreamVolume field...')
 
         # ! Cleaning up block
 
