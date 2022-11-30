@@ -266,7 +266,7 @@ class ConnectivityAnalysis(object):
         arcpy.AddField_management(depr, 'HydJunID', 'LONG')
         arcpy.AddField_management(depr, 'NextDrownID', 'LONG')
         arcpy.AddField_management(depr, 'NextDownID', 'LONG')
-        arcpy.AddField_management(depr, 'Order', 'LONG')
+        
         arcpy.AddField_management(depr, 'UpstreamVolume', 'DOUBLE')
         arcpy.AddField_management(hyd_jun, 'IsActive', 'SHORT')
         arcpy.AddField_management(hyd_jun, 'Elevin', 'LONG')
@@ -305,6 +305,7 @@ class ConnectivityAnalysis(object):
                         row[2] = upper_row[0]
                 else:
                     row[2] = -1
+                    row[1] = -1
 
                 arcpy.Delete_management(curr_hyd_jun)
 
@@ -317,18 +318,53 @@ class ConnectivityAnalysis(object):
                 cursor.updateRow(row)
 
 
-        arcpy.DeleteField_management(hyd_jun, 'Elevin', 'IsAcive')
+        arcpy.DeleteField_management(hyd_jun, 'Elevin')
 
         # ! Order definition block
+        
         arcpy.AddField_management(dra, 'DeprID', 'LONG')
+        arcpy.AddField_management(depr, 'DeprOrder', 'SHORT')
+        arcpy.JoinField_management(dra, 'HydroID', depr, 'DrainID', 'HydroID')
+        arcpy.CalculateField_management(dra, 'DeprID', '!HydroID_1!', 'PYTHON_9.3')
+        arcpy.DeleteField_management(dra, 'HydroID_1')
         
         
-        # arcpy.AddMessage('Calculating UpstreamVolume field...')
+        arcpy.JoinField_management(depr, 'NextDrownID', dra, 'HydroID', 'DeprID')
+        arcpy.CalculateField_management(depr, 'NextDownID', '!DeprID!', 'PYTHON_9.3')
+        arcpy.DeleteField_management(depr, 'DeprID')
+        arcpy.SelectLayerByAttribute_management(depr, 'NEW_SELECTION', 'NextDrownID = -1')
+        arcpy.CalculateField_management(depr, 'NextDownID', '-1', 'PYTHON_9.3')
+        arcpy.CalculateField_management(depr, 'DeprOrder', '1', 'PYTHON_9.3')
+        arcpy.SelectLayerByAttribute_management(depr, 'CLEAR_SELECTION')
+      
+        i = 1
+        i_list = []
+        while True:
+            i_list.append(i)
+            arcpy.AddMessage('Processing {0} order...'.format(i))
+            hydro_values = [row[0] for row in arcpy.da.SearchCursor(depr, "HydroID", where_clause='DeprOrder = {0}'.format(i))]
+            i += 1
+            if len(hydro_values) == 0:
+                break
+            arcpy.SelectLayerByAttribute_management(depr, 'NEW_SELECTION', 'NextDownID in '+str(tuple(hydro_values)))
+            arcpy.CalculateField_management(depr, 'DeprOrder', str(i), 'PYTHON_9.3')
+            
+            arcpy.SelectLayerByAttribute_management(depr, 'NEW_SELECTION', 'DeprOrder IS NULL')
+            if int(str(arcpy.management.GetCount(depr))) == 0:
+                break
+            arcpy.SelectLayerByAttribute_management(depr, 'CLEAR_SELECTION')
 
+        arcpy.AddMessage('Calculating UpstreamVolume field...')
+
+        # for n in range(i-1, 0, -1):
+        #     for row in arcpy.da.UpdateCursor(depr, ['UpstreamVolume', 'OverflowVolume', 'DrainVolume',], where_clause='Order = {0}'.format(n))
+        #     row[0] = sum([r[0] for r in arcpy.da.SearchCursor (depr, ['OverflowVolume'], where_clause='Order = {0}'.format(n+1))])
+               
+        
         # ! Cleaning up block
 
-        # arcpy.Delete_management(arcpy.env.scratchGDB)
-        # arcpy.Delete_management(arcpy.env.scratchFolder)
+        arcpy.Delete_management(arcpy.env.scratchGDB)
+        arcpy.Delete_management(arcpy.env.scratchFolder)
         # arcpy.Delete_management(arcpy.env.scratchWorkspace)
         
         arcpy.AddMessage('SUCCESS')
